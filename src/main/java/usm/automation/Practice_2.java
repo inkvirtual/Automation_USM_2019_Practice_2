@@ -1,5 +1,6 @@
 package usm.automation;
 
+import com.thoughtworks.xstream.XStream;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpUriRequest;
@@ -7,8 +8,6 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.jdom2.JDOMException;
-import org.jdom2.input.SAXBuilder;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -28,14 +27,14 @@ public class Practice_2 {
     private static final String REQUEST_DATE_FORMAT = "dd.MM.yyyy";
     private static final String OUTPUT_VALUTES_EXCEL = "./Practice_2.xlsx";
 
-    public static void main(String[] args) throws IOException, ParseException, JDOMException {
+    public static void main(String[] args) throws IOException, ParseException {
 
         // 1. Read the dates form txt file
         List<Date> dates = getDates(INPUT_DATES_FILE, FILE_DATE_FORMAT);
 
         //2. Request currency rates for above dates
         //3. Deserialize rates
-        Map<Date, List<Valute>> dateValutesMap = requestValutes(dates);
+        Map<Date, Valutes> dateValutesMap = requestValutes(dates);
 
         // Convert to Excel
         Workbook workbook = toExcelWorkbook(dateValutesMap);
@@ -44,9 +43,9 @@ public class Practice_2 {
         writeWorkbookToFile(OUTPUT_VALUTES_EXCEL, workbook);
     }
 
-    private static Map<Date, List<Valute>> requestValutes(List<Date> dates) throws JDOMException, IOException {
+    private static Map<Date, Valutes> requestValutes(List<Date> dates) throws IOException {
 
-        Map<Date, List<Valute>> dateValutesMap = new LinkedHashMap<>();
+        Map<Date, Valutes> dateValutesMap = new LinkedHashMap<>();
         CloseableHttpClient client = HttpClientBuilder.create().build();
 
         for (Date date : dates) {
@@ -56,7 +55,7 @@ public class Practice_2 {
             CloseableHttpResponse response = client.execute(request);
             InputStream responseStream = response.getEntity().getContent();
 
-            dateValutesMap.put(date, toValuteList(responseStream));
+            dateValutesMap.put(date, toValutes(responseStream));
 
             response.close();
         }
@@ -64,7 +63,7 @@ public class Practice_2 {
         return dateValutesMap;
     }
 
-    private static Workbook toExcelWorkbook(Map<Date, List<Valute>> dateValutesMap) throws IOException {
+    private static Workbook toExcelWorkbook(Map<Date, Valutes> dateValutesMap) {
 
         Workbook workbook = new XSSFWorkbook();
         String dateFormat = "dd.MM.yyyy";
@@ -79,9 +78,10 @@ public class Practice_2 {
         headerStyle.setBorderRight(BorderStyle.THICK);
         headerStyle.setFont(headerFont);
 
-        for (Map.Entry<Date, List<Valute>> entry : dateValutesMap.entrySet()) {
+        for (Map.Entry<Date, Valutes> entry : dateValutesMap.entrySet()) {
 
-            Sheet dateSheet = workbook.createSheet(dateToString(entry.getKey(), dateFormat));
+            String date = dateToString(entry.getKey(), dateFormat);
+            Sheet dateSheet = workbook.createSheet(date);
 
             Row headerRow = dateSheet.createRow(0);
 
@@ -92,12 +92,12 @@ public class Practice_2 {
             createCell(headerRow, 5, "Name", headerStyle);
             createCell(headerRow, 6, "Value", headerStyle);
 
-            List<Valute> valutes = entry.getValue();
+            Valute[] valutes = entry.getValue().getValutes().toArray(new Valute[entry.getValue().getValutes().size()]);
 
-            for (int i = 0; i < valutes.size(); i++) {
+            for (int i = 0; i < valutes.length; i++) {
 
                 Row valuteRow = dateSheet.createRow(i + 1);
-                Valute valute = valutes.get(i);
+                Valute valute = valutes[i];
                 createCell(valuteRow, 1, String.valueOf(valute.getId()));
                 createCell(valuteRow, 2, String.valueOf(valute.getNumCode()));
                 createCell(valuteRow, 3, String.valueOf(valute.getCharCode()));
@@ -135,51 +135,35 @@ public class Practice_2 {
             cell.setCellStyle(style);
     }
 
-    private static List<Valute> toValuteList(InputStream inputStream) throws JDOMException, IOException {
-        return new SAXBuilder().build(inputStream).getRootElement().getChildren().stream()
-                .map((element) -> new Valute(
-                        Long.parseLong(element.getAttributeValue("ID")),
-                        Integer.parseInt(element.getChildText("NumCode")),
-                        element.getChildText("CharCode"),
-                        Integer.parseInt(element.getChildText("Nominal")),
-                        element.getChildText("Name"),
-                        Double.parseDouble(element.getChildText("Value"))))
-                .collect(Collectors.toList());
+    private static Valutes toValutes(InputStream inputStream) {
+
+        XStream xstream = new XStream();
+        xstream.processAnnotations(Valutes.class);
+
+        return (Valutes) xstream.fromXML(inputStream);
     }
 
-//    private static CloseableHttpResponse requestBnmRate(Date date) {
-//
-//        String protocol = "https";
-//        String host = "bnm.md";
-//        String resource = "/en/official_exchange_rates";
-//
-//        List<NameValuePair> params = new ArrayList<>();
-//        params.add(new BasicNameValuePair("get_xml", "1"));
-//        params.add(new BasicNameValuePair("date", dateToString(date, REQUEST_DATE_FORMAT)));
-//
-//        HttpGet request = new HttpGet(String.format("%s://%s%s", protocol, host, resource));
-//        new HttpPost().setEntity
-//        CloseableHttpResponse response = client.execute(request);
-//
-//    }
+    private static List<Date> getDates(String inputFile, String dateFormat) throws IOException {
 
-    private static List<Date> getDates(String inputFile, String dateFormat) throws IOException, ParseException {
-
-        List<String> fileContent = getFileContent(inputFile);
-        List<Date> dates = new ArrayList<>();
-
-        for (String line : fileContent)
-            dates.add(stringToDate(line, dateFormat));
-
-        return dates;
+        // I know it's not perfect :))))
+        return getFileContent(inputFile).stream()
+                .map(line -> stringToDate(line, dateFormat))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toList());
     }
 
     private static List<String> getFileContent(final String fileName) throws IOException {
         return Files.readAllLines(Paths.get(fileName));
     }
 
-    private static Date stringToDate(final String date, final String dateFormat) throws ParseException {
-        return new SimpleDateFormat(dateFormat).parse(date);
+    private static Optional<Date> stringToDate(final String date, final String dateFormat) {
+        try {
+            return Optional.of(new SimpleDateFormat(dateFormat).parse(date));
+        } catch (ParseException pe) {
+            System.err.println("Failed to parse date " + date);
+            return Optional.empty();
+        }
     }
 
     private static String dateToString(final Date date, final String format) {

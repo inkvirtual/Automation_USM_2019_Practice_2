@@ -1,15 +1,31 @@
 package usm.automation;
 
-public class Valute {
+import com.thoughtworks.xstream.annotations.XStreamAlias;
+import com.thoughtworks.xstream.annotations.XStreamAsAttribute;
 
+@XStreamAlias("Valute")
+public final class Valute {
+
+    @XStreamAsAttribute
+    @XStreamAlias("ID")
     private long id;
-    private int numCode;
+
+    @XStreamAlias("NumCode")
+    private String numCode;
+
+    @XStreamAlias("CharCode")
     private String charCode;
+
+    @XStreamAlias("Nominal")
     private int nominal;
+
+    @XStreamAlias("Name")
     private String name;
+
+    @XStreamAlias("Value")
     private double value;
 
-    public Valute(long id, int numCode, String charCode, int nominal, String name, double value) {
+    public Valute(long id, String numCode, String charCode, int nominal, String name, double value) {
         this.id = id;
         this.numCode = numCode;
         this.charCode = charCode;
@@ -22,7 +38,7 @@ public class Valute {
         return id;
     }
 
-    public int getNumCode() {
+    public String getNumCode() {
         return numCode;
     }
 
